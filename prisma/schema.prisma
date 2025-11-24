@@ -1,0 +1,185 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id               String   @id @default(uuid())
+  name             String
+  email            String   @unique
+  password         String?  // Optional for now to support existing users, but should be required for new ones
+  role             String   // 'Admin' | 'Owner'
+  cars             Car[]
+  resetToken       String?
+  resetTokenExpiry DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Car {
+  id             String          @id @default(uuid())
+  make           String
+  model          String
+  year           Int
+  plate          String          @unique
+  status         String          // 'Available' | 'Rented' | 'Maintenance'
+  category       String          // 'Sedan' | 'Mid-SUV' | 'Full SUV' | 'Commercial'
+  dailyRate      Float
+  image          String
+  ownerId        String?
+  owner          User?           @relation(fields: [ownerId], references: [id])
+  serviceHistory ServiceRecord[]
+  bookings       Booking[]
+  expenses       Expense[]
+  documents      AssetDocument[]
+  deletedAt      DateTime?       // Soft Delete timestamp
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model Season {
+  id              String   @id @default(cuid())
+  name            String
+  startDate       DateTime
+  endDate         DateTime
+  priceMultiplier Float
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model AssetDocument {
+  id         String   @id @default(cuid())
+  carId      String
+  car        Car      @relation(fields: [carId], references: [id], onDelete: Cascade)
+  type       String   // 'Insurance' | 'Inspection' | 'Logbook' | 'Other'
+  expiryDate DateTime?
+  fileUrl    String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model ServiceRecord {
+  id            String   @id @default(uuid())
+  carId         String
+  car           Car      @relation(fields: [carId], references: [id], onDelete: Cascade)
+  date          String
+  type          String   // 'Oil' | 'Gearbox' | ...
+  description   String
+  garageName    String
+  partsReplaced String   // JSON string
+  cost          Float
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Booking {
+  id           String   @id @default(uuid())
+  carId        String
+  car          Car      @relation(fields: [carId], references: [id], onDelete: Cascade)
+  customerName String
+  client       Client   @relation(fields: [customerName], references: [name])
+  startDate    String
+  endDate      String
+  pickupFee    Float?
+  deliveryFee  Float?
+  totalAmount  Float
+  discountPerDay Float @default(0)
+  status       String   // 'Active' | 'Completed' | 'Cancelled' | 'Upcoming'
+  invoice      Invoice?
+  payments     Payment[]
+  inspections  Inspection[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Client {
+  name      String    @id
+  email     String?
+  phone     String?
+  bookings  Booking[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Invoice {
+  id        String   @id @default(uuid())
+  invoiceNumber String? @unique // Custom format: DTCH/I/100/2025
+  bookingId String   @unique
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  date      String
+  items     String   // JSON string: { description: string; amount: number }[]
+  total     Float
+  status    String   // 'Paid' | 'Unpaid' | 'Pending'
+  pdfUrl    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  bookingId String
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  amount    Float
+  dueDate   String
+  status    String   // 'Paid' | 'Pending' | 'Overdue'
+  method    String?  // 'Cash' | 'Cheque' | 'Transfer' | 'Mobile Money'
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  carId       String
+  car         Car      @relation(fields: [carId], references: [id], onDelete: Cascade)
+  date        String
+  type        String   // 'Fuel' | 'Service' | 'Insurance' | 'Car Wash' | 'Other'
+  amount      Float
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SystemSettings {
+  id                 String   @id @default(cuid())
+  companyName        String   @default("Dunat Car Rental")
+  companyEmail       String?
+  companyPhone       String?
+  companyAddress     String?
+  currency           String   @default("KES")
+  vatRate            Float    @default(16.0)
+  mpesaPaybill       String?
+  bankDetails        String?
+  termsAndConditions String?
+  
+  // Invoice Numbering
+  lastInvoiceCounter Int      @default(90) // Starts at 90 so first increment is 100
+
+  // Website Integration
+  wpUrl              String?
+  wpUsername         String?
+  wpAppPassword      String? // Encrypted or stored as is (assuming secure server)
+  
+  updatedAt          DateTime @updatedAt
+}
+
+model Inspection {
+  id String @id @default(cuid())
+  bookingId String
+  booking Booking @relation(fields: [bookingId], references: [id])
+  type String // 'Check-out' | 'Check-in'
+  fuelLevel Float // 0 to 1 (e.g. 0.5 for half tank)
+  mileage Float
+  photos String // JSON string of URLs
+  damagePoints String // JSON string of coordinates/notes
+  notes String?
+  performedBy String // User ID or Name
+  createdAt DateTime @default(now())
+}
